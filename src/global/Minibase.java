@@ -56,7 +56,8 @@ public class Minibase {
     // load the static layers
     try {
       DiskManager = new DiskMgr();
-      BufferManager = new BufMgr(bufpoolsize);
+      BufferManager = new BufMgr(bufpoolsize, replacement_policy);//Gave policy to constructor to allow factory-style creation of other 
+                                                                   //policies instead of hardcoding a policy
     } catch (Exception exc) {
       haltSystem(exc);
     }

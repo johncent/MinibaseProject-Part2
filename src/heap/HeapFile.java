@@ -2,6 +2,7 @@ package heap;
 
 import global.GlobalConst;
 import global.RID;
+import global.PageId;
 
 /**
  * <h3>Minibase Heap Files</h3>
@@ -12,6 +13,10 @@ import global.RID;
  * is the most basic access method.
  */
 public class HeapFile implements GlobalConst {
+
+  protected static final short DATA_PAGE = 1; //arbitrary number to describe HFPage as a data page
+  protected static final short DIR_PAGE = 2; //arbitrary number to describe HFPage as a directory page
+  protected PageId headId; //header page of the directory
 
   /**
    * If the given name already denotes a file, this opens it; otherwise, this
