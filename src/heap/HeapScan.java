@@ -37,7 +37,7 @@ public class HeapScan implements GlobalConst {
 
     // pin the head page and get the count
     dirPage = new DirPage();
-    Minibase.BufferManager.pinPage(hf.headId, dirPage, PIN_DISKIO);
+    Minibase.BufferManager.pinPage(hf.head_node, dirPage, PIN_DISKIO);
     count = dirPage.getEntryCnt();
 
     // initialize other data fields
