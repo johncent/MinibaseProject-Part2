@@ -105,7 +105,6 @@ public class HeapFile implements GlobalConst
       Minibase.BufferManager.freePage( directory_id );
     } // end for loop
     
-    //throw new UnsupportedOperationException("Not implemented");
   } // end deleteFile
 
   /**
@@ -114,7 +113,148 @@ public class HeapFile implements GlobalConst
    * @throws IllegalArgumentException if the record is too large
    */
   public RID insertRecord(byte[] record) {
-    throw new UnsupportedOperationException("Not implemented");
+
+    if((record.length + 20 + 4) > PAGE_SIZE) //If record length + the header size + the slot size is greater than the size of a page
+      throw new IllegalArgumentException("Record size is greater than space needed");
+
+    PageId availablePageId = getAvailPage(record.length);
+    DataPage availableDataPage = new DataPage();
+    //Now that we know of an available page, buffer it to insert the record into it
+    Minibase.BufferManager.pinPage(availablePageId, availableDataPage, PIN_DISKIO);
+
+    RID rid = availableDataPage.insertRecord(record); //insert
+
+    int freeSpace = availableDataPage.getFreeSpace();
+
+    Minibase.BufferManager.unpinPage(availablePageId, true); //unpin as dirty
+
+    //Update directory entry to account for added record and subtracted free space
+    updateEntry(availablePageId, 1, freeSpace); //TODO NOT IMPLEMENTED YET -JOHN
+
+    return rid;
+
+  }
+
+  /**
+   * Updates the directory entry for the given page with the recently changed values 
+   * (i.e. delta is the difference between the old and the new).
+   * @param pageno Page id of data page that was updated
+   * @param deltaRec Difference in records
+   * @param freecnt The page's updated free count 
+   */
+  private void updateEntry(PageId pageno, int deltaRec, int freecnt)
+  {
+
+  }
+
+  /**
+   * Searches through the directory for a page with enough available space to store a record of the given
+   * size. Creates a new data page if no pages with enough available space are found
+   *
+   * @param recLen Length of a record we are trying to add
+   * @return PageId of the available page 
+   */
+  private PageId getAvailPage(int recLen)
+  {
+    PageId availPageId = null;
+    PageId directory_id = new PageId( head_node.pid ); //Start at the head of the file
+    DirPage directory_page = new DirPage();
+    PageId next_page_id;
+
+    while( directory_id.pid != -1 )
+    {
+      Minibase.BufferManager.pinPage( directory_id, directory_page, PIN_DISKIO );
+       
+      for(int slot = 0; slot < directory_page.getEntryCnt(); slot++)
+      {
+        int freeSpace = directory_page.getFreeCnt(slot);
+        if(recLen + 4 <= freeSpace) //Add 4 to account for the slot size needed for the record
+        {
+          availPageId = directory_page.getPageId(slot);
+          break; //Found available page
+        }
+      }
+
+      next_page_id = directory_page.getNextPage();
+      Minibase.BufferManager.unpinPage(directory_id, false); //Unpin clean, nothing was changed in page
+      if(null != availPageId)
+      {
+        break; //Leave while loop, you have your page
+      }
+      else
+      {
+        directory_id = next_page_id;
+      }
+    }
+
+    if(null == availPageId) //If we don't have an available page, insert a new one
+    {
+      availPageId = insertPage();
+    }
+    return availPageId;
+
+  }
+
+  /**
+   * Inserts a new data page its directory entry into the heap file. If necessary, this also inserts a new directory page.
+   * @return Id of the new data page
+   */
+  private PageId insertPage()
+  {
+    boolean found_dir_page = false; //flag that says whether we found a dir page with space for a new entry or not
+    PageId directory_id = new PageId( head_node.pid ); //Start at the head of the file
+    DirPage directory_page = new DirPage();
+    PageId next_page_id;
+    short entry_count = 0; //Number of entries on directory page
+
+    while (true)
+    {
+      Minibase.BufferManager.pinPage( directory_id, directory_page, PIN_DISKIO );
+       
+       entry_count = directory_page.getEntryCnt();
+       if(entry_count < directory_page.MAX_ENTRIES)
+       {
+          found_dir_page = true;
+          break;
+       }
+
+      next_page_id = directory_page.getNextPage();
+      if(-1 == next_page_id.pid)
+      { //No available directory pages with empty entry slots, we need to create one
+        DirPage new_directory_page = new DirPage();
+        PageId new_directory_id = Minibase.BufferManager.newPage(new_directory_page, 1);
+        new_directory_page.setCurPage(new_directory_id);
+        directory_page.setNextPage(new_directory_id);
+        new_directory_page.setPrevPage(directory_id);
+        Minibase.BufferManager.unpinPage(directory_id, true); //Unpin dirty
+        directory_id = new_directory_id;
+        directory_page = new_directory_page;
+        break;
+      }
+      else
+      {
+        Minibase.BufferManager.unpinPage(directory_id, false); //Unpin clean, nothing was changed in page
+        directory_id = next_page_id;
+      }
+    }
+
+    if( !found_dir_page )
+    { //We created a new directory page with no entries
+      entry_count = 0;
+    }
+
+    DataPage new_data_page = new DataPage();
+    PageId new_data_id = Minibase.BufferManager.newPage(new_data_page, 1);
+    new_data_page.setCurPage(new_data_id);
+    directory_page.setPageId(entry_count, new_data_id); //set the available entry to our new data page
+    directory_page.setRecCnt(entry_count, (short)0); //record count initialized to 0 for new data page
+    short free_space = new_data_page.getFreeSpace();
+    directory_page.setFreeCnt(entry_count, free_space); //initialize free space
+    directory_page.setEntryCnt(entry_count++); //increment number of entries
+    Minibase.BufferManager.unpinPage(new_data_id, true);
+    Minibase.BufferManager.unpinPage(directory_id, true);
+
+    return new_data_id;
   }
 
   /**
@@ -148,7 +288,30 @@ public class HeapFile implements GlobalConst
    * Gets the number of records in the file.
    */
   public int getRecCnt() {
-    throw new UnsupportedOperationException("Not implemented");
+    int rec_count = 0; //Initialize number of records in file
+
+    PageId directory_id = new PageId( head_node.pid ); //Start at the head of the file
+    DirPage directory_page = new DirPage();
+    PageId next_page_id;
+
+    //Iterate through the directory pages
+    while( directory_id.pid != -1 )
+    {
+      Minibase.BufferManager.pinPage( directory_id, directory_page, PIN_DISKIO );
+       
+      //Iterate through the directory entries
+      for(int slot = 0; slot < directory_page.getEntryCnt(); slot++)
+      {
+        rec_count = rec_count + directory_page.getRecCnt(slot);
+      }
+
+      next_page_id = directory_page.getNextPage();
+      Minibase.BufferManager.unpinPage(directory_id, false); //Unpin clean, nothing was changed in page
+      directory_id = next_page_id;
+    }
+
+    return rec_count;
+
   }
 
   /**
