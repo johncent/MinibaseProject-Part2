@@ -374,10 +374,10 @@ public class HeapFile implements GlobalConst
     }
     catch(IllegalArgumentException exc)
     {
-      Minibase.BufferManager.unpinPage( rid.pageno, false );
-
       throw exc;
     }
+    
+    Minibase.BufferManager.unpinPage( rid.pageno, false );
   
     return record_data;
   }
