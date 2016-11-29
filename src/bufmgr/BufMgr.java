@@ -104,10 +104,11 @@ public class BufMgr implements GlobalConst {
         if (-1 != victim_no)
         {       
             FrameDesc victim = frametable[victim_no];
-          if (victim != null && victim.isDirty()) 
+          if (victim.getValidDataIndicator() && victim.isDirty()) 
           {
             PageId tempId = new PageId(victim.getDiskPageNum());
             Minibase.DiskManager.write_page(tempId, bufpool[victim_no]);
+            victim.setDirtyBit(false);
           }
           if (contents == PIN_DISKIO)
           {
@@ -116,9 +117,11 @@ public class BufMgr implements GlobalConst {
             Minibase.DiskManager.read_page(pageno, new_page);
             bufpool[victim_no].copyPage(new_page);
             mempage.setPage(bufpool[victim_no]);
-            Minibase.DiskManager.read_page(pageno,bufpool[victim_no]);
+          //  Minibase.DiskManager.read_page(pageno,bufpool[victim_no]);
             victim.incrementPinCount();  
-            victim.setValidDataIndicator(true); 
+            victim.setValidDataIndicator(true);
+            victim.setDirtyBit(false);
+            victim.setRefBit(false);
             victim.setDiskPageNum(pageno.pid);
             pagemap.put(pageno.pid, victim_no);
             
@@ -129,8 +132,10 @@ public class BufMgr implements GlobalConst {
             pagemap.remove(victim.getDiskPageNum()); //remove victim from hashmap
             bufpool[victim_no].copyPage(mempage);
             mempage.setPage(bufpool[victim_no]);
-            victim.incrementPinCount();  
-            victim.setValidDataIndicator(true); 
+            victim.incrementPinCount(); 
+            victim.setValidDataIndicator(true);
+            victim.setDirtyBit(false);
+            victim.setRefBit(false); 
             victim.setDiskPageNum(pageno.pid); 
             pagemap.put(pageno.pid, victim_no);          
           } 
@@ -170,7 +175,11 @@ public class BufMgr implements GlobalConst {
     }
 
     frametable[frame].decrementPinCount();
-    frametable[frame].setDirtyBit(dirty);
+
+    if(dirty)
+    {
+      frametable[frame].setDirtyBit(dirty);
+    }
     
     if(frametable[frame].getPinCount() == 0)
     {
