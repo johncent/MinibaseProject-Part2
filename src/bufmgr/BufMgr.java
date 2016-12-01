@@ -117,7 +117,6 @@ public class BufMgr implements GlobalConst {
             Minibase.DiskManager.read_page(pageno, new_page);
             bufpool[victim_no].copyPage(new_page);
             mempage.setPage(bufpool[victim_no]);
-          //  Minibase.DiskManager.read_page(pageno,bufpool[victim_no]);
             victim.incrementPinCount();  
             victim.setValidDataIndicator(true);
             victim.setDirtyBit(false);
